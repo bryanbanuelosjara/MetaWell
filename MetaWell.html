@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MetaWell</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+  background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+  min-height:100vh; padding:20px;
+}
+
+.container {
+  max-width:1500px; margin:0 auto; background:white;
+  border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.3); padding:30px;
+}
+
+h1 { color:#333; margin-bottom:8px; font-size:26px; }
+.subtitle { color:#666; margin-bottom:20px; font-size:13px; }
+
+/* ── Top bar ── */
+.top-bar {
+  display:flex; align-items:center; gap:12px;
+  margin-bottom:20px; flex-wrap:wrap;
+}
+.format-toggle {
+  display:flex; background:#f0f0f0; border-radius:8px; overflow:hidden; border:2px solid #e2e8f0;
+}
+.format-btn {
+  padding:8px 18px; border:none; background:transparent;
+  cursor:pointer; font-weight:600; font-size:13px; color:#666; transition:all 0.2s;
+}
+.format-btn.active { background:#667eea; color:white; }
+
+.undo-bar { display:flex; gap:6px; margin-left:auto; align-items:center; }
+.undo-btn {
+  padding:8px 14px; border:2px solid #e2e8f0; border-radius:6px;
+  background:white; cursor:pointer; font-size:13px; font-weight:600;
+  color:#555; transition:all 0.2s;
+}
+.undo-btn:hover:not(:disabled) { border-color:#667eea; color:#667eea; }
+.undo-btn:disabled { opacity:0.35; cursor:not-allowed; }
+.undo-hint { font-size:11px; color:#aaa; }
+
+/* ── Main layout ── */
+.main-grid {
+  display:grid; grid-template-columns:1fr 380px; gap:24px; margin-bottom:24px;
+}
+
+.plate-section { background:#f8f9fa; padding:20px; border-radius:12px; overflow-x:auto; }
+
+/* ── Plate container ── */
+.plate-container {
+  display:inline-block; background:white; padding:12px;
+  border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);
+  position:relative; user-select:none;
+}
+
+.selection-rect {
+  position:absolute; border:2px solid #667eea;
+  background:rgba(102,126,234,0.12); border-radius:3px;
+  pointer-events:none; display:none; z-index:10;
+}
+.selection-rect.deselect-mode {
+  border-color:#e53e3e; background:rgba(229,62,62,0.10);
+}
+
+.plate-grid { display:grid; gap:3px; margin-top:8px; }
+.plate-grid.fmt-96  { grid-template-columns:24px repeat(12,40px); }
+.plate-grid.fmt-384 { grid-template-columns:20px repeat(24,22px); }
+
+.column-label, .row-label {
+  display:flex; align-items:center; justify-content:center;
+  font-weight:600; color:#666; font-size:11px;
+}
+.column-label.clickable, .row-label.clickable {
+  cursor:pointer; border-radius:3px; transition:all 0.15s;
+}
+.column-label.clickable:hover, .row-label.clickable:hover { background:#e8edff; color:#667eea; }
+
+.well {
+  border:2px solid #ddd; border-radius:4px; cursor:pointer;
+  background:white; display:flex; align-items:center; justify-content:center;
+  font-size:9px; color:#bbb; user-select:none;
+  transition:background 0.12s, border-color 0.12s;
+}
+.plate-grid.fmt-96  .well { width:40px; height:40px; border-radius:6px; }
+.plate-grid.fmt-384 .well { width:22px; height:22px; border-radius:3px; }
+.plate-grid.fmt-96  .well:hover { transform:scale(1.08); border-color:#667eea; }
+.plate-grid.fmt-384 .well:hover { border-color:#667eea; }
+
+.well.selected    { background:#667eea !important; border-color:#5560d3 !important; color:white; }
+.well.has-data    { background:#48bb78; border-color:#3da866; color:white; }
+.well.has-data.selected { background:#2d7a4f !important; border-color:#246040 !important; }
+.well.in-selection-box  { outline:2px solid #667eea; outline-offset:1px; }
+.well.in-selection-box.deselect-preview { outline-color:#e53e3e; }
+
+/* ── Controls ── */
+.controls-section { background:#f8f9fa; padding:20px; border-radius:12px; }
+.control-group { margin-bottom:18px; }
+
+label { display:block; font-weight:600; color:#333; margin-bottom:7px; font-size:13px; }
+
+input, select {
+  width:100%; padding:9px 10px; border:2px solid #e2e8f0;
+  border-radius:6px; font-size:13px; transition:border-color 0.2s;
+}
+input:focus, select:focus { outline:none; border-color:#667eea; }
+
+.value-with-unit { display:flex; gap:8px; }
+.value-with-unit input:first-child { flex:1; }
+.unit-input { width:76px !important; flex-shrink:0; text-align:center; font-size:12px; }
+.unit-hint  { font-size:11px; color:#999; margin-top:4px; }
+
+.button-group { display:flex; gap:8px; margin-top:16px; }
+button { flex:1; padding:10px 16px; border:none; border-radius:6px; font-weight:600; cursor:pointer; transition:all 0.2s; font-size:13px; }
+
+.btn-apply  { background:#667eea; color:white; }
+.btn-apply:hover { background:#5568d3; transform:translateY(-1px); box-shadow:0 4px 10px rgba(102,126,234,0.4); }
+.btn-clear  { background:#e2e8f0; color:#333; }
+.btn-clear:hover { background:#cbd5e0; }
+.btn-download { background:#48bb78; color:white; width:100%; margin-top:10px; }
+.btn-download:hover { background:#38a169; transform:translateY(-1px); box-shadow:0 4px 10px rgba(72,187,120,0.4); }
+.btn-download:disabled { background:#cbd5e0; cursor:not-allowed; transform:none; }
+
+.info-box {
+  background:#ebf4ff; border-left:4px solid #667eea;
+  padding:12px 14px; border-radius:6px; margin-bottom:18px;
+  font-size:12px; color:#2c5282; line-height:1.5;
+}
+
+.stats { display:flex; gap:12px; margin-top:14px; }
+.stat  { flex:1; background:white; padding:12px; border-radius:6px; text-align:center; }
+.stat-value { font-size:22px; font-weight:700; color:#667eea; }
+.stat-label { font-size:11px; color:#666; margin-top:4px; }
+
+.selection-tools { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.tool-btn {
+  padding:7px 13px; background:white; border:2px solid #e2e8f0;
+  border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; transition:all 0.2s;
+}
+.tool-btn:hover { border-color:#667eea; color:#667eea; }
+
+.legend { display:flex; gap:16px; margin-top:12px; font-size:11px; flex-wrap:wrap; }
+.legend-item { display:flex; align-items:center; gap:6px; }
+.legend-box { width:16px; height:16px; border-radius:3px; border:2px solid #ddd; flex-shrink:0; }
+.legend-box.empty    { background:white; }
+.legend-box.selected { background:#667eea; border-color:#667eea; }
+.legend-box.filled   { background:#48bb78; border-color:#48bb78; }
+
+/* ── Tabs ── */
+.bottom-section { margin-top:24px; background:#f8f9fa; padding:20px; border-radius:12px; }
+.tabs { display:flex; gap:0; border-bottom:2px solid #e2e8f0; margin-bottom:0; }
+.tab-btn {
+  padding:10px 22px; border:none; background:transparent;
+  cursor:pointer; font-weight:600; font-size:13px; color:#888;
+  border-bottom:3px solid transparent; margin-bottom:-2px; transition:all 0.2s; flex:unset;
+}
+.tab-btn.active { color:#667eea; border-bottom-color:#667eea; }
+.tab-btn:hover:not(.active) { color:#555; }
+
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+/* ── Preview table ── */
+.preview-table { width:100%; max-height:280px; overflow:auto; background:white; border-radius:6px; margin-top:12px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th,td { padding:7px 10px; text-align:left; border-bottom:1px solid #e2e8f0; }
+th { background:#f7fafc; font-weight:600; color:#333; position:sticky; top:0; }
+
+/* ── Plate Map ── */
+.map-controls {
+  display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; padding-top:14px;
+}
+.map-controls label { margin:0; white-space:nowrap; font-size:13px; }
+.map-controls select { width:auto; min-width:200px; padding:7px 10px; font-size:13px; }
+
+.map-wrapper { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+
+.map-plate-container {
+  background:white; padding:12px; border-radius:8px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08); overflow-x:auto;
+}
+
+.map-grid { display:grid; gap:3px; margin-top:6px; }
+.map-grid.fmt-96  { grid-template-columns:24px repeat(12,38px); }
+.map-grid.fmt-384 { grid-template-columns:20px repeat(24,21px); }
+
+.map-col-label, .map-row-label {
+  display:flex; align-items:center; justify-content:center;
+  font-weight:600; color:#999; font-size:10px;
+}
+
+.map-well {
+  display:flex; align-items:center; justify-content:center;
+  border-radius:4px; font-weight:700;
+  cursor:default; position:relative;
+  border:1.5px solid rgba(0,0,0,0.1);
+  overflow:visible;
+}
+.map-grid.fmt-96  .map-well { width:38px; height:38px; border-radius:6px; font-size:9px; }
+.map-grid.fmt-384 .map-well { width:21px; height:21px; border-radius:3px; font-size:0; }
+.map-well.empty-well { background:#f3f4f6; border-color:#e5e7eb; }
+
+/* tooltip */
+.map-well .map-tooltip {
+  display:none; position:fixed; z-index:9999;
+  background:rgba(20,20,20,0.93); color:white; font-size:11px;
+  padding:7px 11px; border-radius:7px; white-space:nowrap;
+  pointer-events:none; line-height:1.7; font-weight:400;
+  box-shadow:0 4px 14px rgba(0,0,0,0.35);
+  transform:translateX(-50%) translateY(-100%) translateY(-8px);
+}
+.map-well:hover .map-tooltip { display:block; }
+
+.map-legend {
+  min-width:160px; max-width:220px; background:white; padding:14px;
+  border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+.map-legend h4 { font-size:12px; color:#666; margin-bottom:10px; font-weight:600; }
+.legend-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; color:#333; }
+.legend-swatch {
+  width:18px; height:18px; border-radius:4px; flex-shrink:0;
+  border:1.5px solid rgba(0,0,0,0.1);
+}
+.gradient-bar { width:130px; height:14px; border-radius:4px; border:1.5px solid rgba(0,0,0,0.1); }
+.gradient-ends { display:flex; justify-content:space-between; font-size:10px; color:#888; margin-top:3px; width:130px; }
+
+.map-empty-msg {
+  padding:30px; text-align:center; color:#999; font-size:13px;
+  background:white; border-radius:8px; margin-top:12px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧪 MetaWell</h1>
+  <p class="subtitle">Build well-level metadata for 96- or 384-well plates, then export a TSV for analysis</p>
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="format-toggle">
+      <button class="format-btn active" id="btn96"  onclick="setFormat(96)">96-well</button>
+      <button class="format-btn"        id="btn384" onclick="setFormat(384)">384-well</button>
+    </div>
+    <div class="undo-bar">
+      <button class="undo-btn" id="undoBtn" onclick="undo()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
+      <button class="undo-btn" id="redoBtn" onclick="redo()" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z)">↪ Redo</button>
+      <span class="undo-hint" id="undoHint"></span>
+    </div>
+  </div>
+
+  <div class="main-grid">
+    <!-- Plate -->
+    <div class="plate-section">
+      <div class="selection-tools">
+        <button class="tool-btn" onclick="selectAll()">⬜ Select All</button>
+        <button class="tool-btn" onclick="clearSelection()">✖ Clear Selection</button>
+      </div>
+      <div style="font-size:11px;color:#666;margin-bottom:10px;padding:0 4px;">
+        💡 <strong>Drag</strong> to draw a selection box &nbsp;·&nbsp;
+        Start drag on a <em>selected</em> well to <strong>deselect</strong> &nbsp;·&nbsp;
+        Click row/column labels to toggle entire row/column
+      </div>
+
+      <div class="plate-container" id="plateContainer">
+        <div class="selection-rect" id="selectionRect"></div>
+        <div class="plate-grid fmt-96" id="plateGrid"></div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-box empty"></div><span>Empty</span></div>
+        <div class="legend-item"><div class="legend-box selected"></div><span>Selected</span></div>
+        <div class="legend-item"><div class="legend-box filled"></div><span>Has Data</span></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-value" id="selectedCount">0</div><div class="stat-label">Selected</div></div>
+        <div class="stat"><div class="stat-value" id="filledCount">0</div><div class="stat-label">Filled</div></div>
+        <div class="stat"><div class="stat-value" id="totalCount">96</div><div class="stat-label">Total Wells</div></div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-section">
+      <div class="info-box">
+        💡 <strong>Workflow:</strong> Select wells → Pick property → Enter value → Apply.<br>
+        Repeat for each property. Use <strong>Ctrl+Z</strong> to undo any step.
+      </div>
+
+      <div class="control-group">
+        <label>Property to Apply</label>
+        <select id="propertyType" onchange="updateInputField()">
+          <option value="sample">Sample / Condition Name</option>
+          <option value="enzyme_conc">Enzyme Concentration</option>
+          <option value="substrate_type">Substrate Type</option>
+          <option value="substrate_conc">Substrate Concentration</option>
+          <option value="replicate">Replicate Number</option>
+          <option value="custom">Custom Field…</option>
+        </select>
+      </div>
+
+      <div class="control-group" id="customFieldGroup" style="display:none;">
+        <label>Custom Field Name</label>
+        <input type="text" id="customFieldName" placeholder="e.g., temperature, pH">
+      </div>
+
+      <div class="control-group">
+        <label id="valueLabel">Value</label>
+        <div class="value-with-unit">
+          <input type="text" id="propertyValue" placeholder="Enter value"
+                 onkeydown="if(event.key==='Enter')applyPropertyToSelected()">
+          <input type="text" id="unitInput" class="unit-input" placeholder="unit"
+                 style="display:none" title="Unit — included in TSV column header">
+        </div>
+        <div class="unit-hint" id="unitHint" style="display:none">Unit is stored in the TSV column header</div>
+      </div>
+
+      <div class="button-group">
+        <button class="btn-apply" onclick="applyPropertyToSelected()">✔ Apply to Selected</button>
+        <button class="btn-clear" onclick="clearSelectedWells()">✖ Clear Wells</button>
+      </div>
+
+      <button class="btn-download" onclick="downloadTSV()" id="downloadBtn" disabled>📥 Download TSV</button>
+
+      <div style="margin-top:18px;padding-top:18px;border-top:2px solid #e2e8f0;">
+        <button class="btn-clear" onclick="resetAll()" style="width:100%">🔄 Reset Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom tabs -->
+  <div class="bottom-section">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('preview',this)">📋 Data Preview</button>
+      <button class="tab-btn"       onclick="switchTab('platemap',this)">🎨 Plate Map</button>
+    </div>
+
+    <div class="tab-content active" id="tab-preview" style="padding-top:14px;">
+      <div class="preview-table" id="previewTable">
+        <p style="padding:20px;text-align:center;color:#999">No data yet. Select wells and apply properties.</p>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-platemap">
+      <div class="map-controls">
+        <label>Colour wells by:</label>
+        <select id="mapProperty" onchange="updatePlateMap()">
+          <option value="">— select a property —</option>
+        </select>
+      </div>
+      <div id="plateMapContent">
+        <div class="map-empty-msg">Apply metadata to wells, then choose a property above to visualise the plate.</div>
+      </div>
+    </div>
+  </div>
+  <div class="credits">
+    Built by <a href="https://github.com/bryanbanuelosjara" target="_blank">@bryanbanuelosjara</a>
+  </div>
+</div>
+
+<style>
+.credits {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: #aaa;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+.credits a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+.credits a:hover { text-decoration: underline; }
+</style>
+
+<script>
+/* ═══ STATE ═══════════════════════════════════════════════════════ */
+let plateFormat   = 96;
+let plateData     = {};
+let selectedWells = new Set();
+let customFields  = new Set();
+const propertyUnits = { enzyme_conc:'µM', substrate_conc:'mM' };
+
+const undoStack = [];  // JSON snapshots
+const redoStack = [];
+
+/* ═══ GEOMETRY ════════════════════════════════════════════════════ */
+const ROWS_96  = 'ABCDEFGH'.split('');
+const ROWS_384 = 'ABCDEFGHIJKLMNOP'.split('');
+function getRows() { return plateFormat === 96 ? ROWS_96 : ROWS_384; }
+function getCols() { return plateFormat === 96 ? 12 : 24; }
+function totalWells() { return plateFormat === 96 ? 96 : 384; }
+
+/* ═══ FORMAT SWITCH ═══════════════════════════════════════════════ */
+function setFormat(fmt) {
+  if (plateFormat === fmt) return;
+  const hasDirty = Object.values(plateData).some(d =>
+    Object.keys(d).some(k => !['well','row','column'].includes(k)));
+  if (hasDirty && !confirm(`Switch to ${fmt}-well? All current data will be cleared.`)) return;
+  plateFormat = fmt;
+  document.getElementById('btn96').classList.toggle('active',  fmt===96);
+  document.getElementById('btn384').classList.toggle('active', fmt===384);
+  plateData = {};
+  selectedWells.clear();
+  undoStack.length = 0; redoStack.length = 0;
+  initPlate();
+  updateStats(); updatePreview(); updateMapPropertyDropdown(); updatePlateMap(); updateUndoButtons();
+}
+
+/* ═══ UNDO / REDO ═════════════════════════════════════════════════ */
+function snapshot() {
+  undoStack.push(JSON.stringify(plateData));
+  redoStack.length = 0;
+  if (undoStack.length > 60) undoStack.shift();
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(plateData));
+  plateData = JSON.parse(undoStack.pop());
+  selectedWells.clear();
+  updateWellDisplay(); updateStats(); updatePreview(); updatePlateMap(); updateUndoButtons();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(plateData));
+  plateData = JSON.parse(redoStack.pop());
+  selectedWells.clear();
+  updateWellDisplay(); updateStats(); updatePreview(); updatePlateMap(); updateUndoButtons();
+}
+function updateUndoButtons() {
+  document.getElementById('undoBtn').disabled = !undoStack.length;
+  document.getElementById('redoBtn').disabled = !redoStack.length;
+  document.getElementById('undoHint').textContent =
+    undoStack.length ? `${undoStack.length} action${undoStack.length>1?'s':''} in history` : '';
+}
+document.addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key==='z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  if (mod && (e.key==='y' || (e.key==='z' && e.shiftKey))) { e.preventDefault(); redo(); }
+});
+
+/* ═══ INIT PLATE ══════════════════════════════════════════════════ */
+function initPlate() {
+  const grid = document.getElementById('plateGrid');
+  grid.innerHTML = '';
+  grid.className = `plate-grid fmt-${plateFormat}`;
+
+  const rows = getRows();
+  const cols = getCols();
+
+  // Corner
+  grid.appendChild(document.createElement('div'));
+
+  // Column labels
+  for (let c = 1; c <= cols; c++) {
+    const el = document.createElement('div');
+    el.className = 'column-label clickable';
+    el.textContent = c;
+    el.addEventListener('click', () => toggleColumn(c));
+    grid.appendChild(el);
+  }
+
+  // Rows
+  rows.forEach(row => {
+    const lbl = document.createElement('div');
+    lbl.className = 'row-label clickable';
+    lbl.textContent = row;
+    lbl.addEventListener('click', () => toggleRow(row));
+    grid.appendChild(lbl);
+
+    for (let c = 1; c <= cols; c++) {
+      const id = `${row}${c}`;
+      const well = document.createElement('div');
+      well.className = 'well';
+      well.dataset.well = id;
+      grid.appendChild(well);
+      if (!plateData[id]) plateData[id] = { well:id, row, column:c };
+    }
+  });
+
+  document.getElementById('totalCount').textContent = totalWells();
+  initRubberBand();
+  updateWellDisplay();
+}
+
+/* ═══ ROW / COL TOGGLE ════════════════════════════════════════════ */
+function toggleRow(row) {
+  const ids = [];
+  for (let c=1; c<=getCols(); c++) ids.push(`${row}${c}`);
+  const all = ids.every(id => selectedWells.has(id));
+  ids.forEach(id => all ? selectedWells.delete(id) : selectedWells.add(id));
+  updateWellDisplay(); updateStats();
+}
+function toggleColumn(col) {
+  const ids = getRows().map(r => `${r}${col}`);
+  const all = ids.every(id => selectedWells.has(id));
+  ids.forEach(id => all ? selectedWells.delete(id) : selectedWells.add(id));
+  updateWellDisplay(); updateStats();
+}
+
+/* ═══ RUBBER-BAND ═════════════════════════════════════════════════ */
+function initRubberBand() {
+  const container = document.getElementById('plateContainer');
+  const rect      = document.getElementById('selectionRect');
+  let dragStart = null, dragMode = null, didDrag = false;
+
+  function getPos(e) {
+    const cr = container.getBoundingClientRect();
+    return { x: e.clientX - cr.left, y: e.clientY - cr.top };
+  }
+  function wellsInRect(x1,y1,x2,y2) {
+    const nx1=Math.min(x1,x2), nx2=Math.max(x1,x2), ny1=Math.min(y1,y2), ny2=Math.max(y1,y2);
+    const cr = container.getBoundingClientRect();
+    return [...document.querySelectorAll('#plateGrid .well')].filter(w => {
+      const wr = w.getBoundingClientRect();
+      return (wr.right-cr.left)>nx1 && (wr.left-cr.left)<nx2 &&
+             (wr.bottom-cr.top)>ny1 && (wr.top-cr.top)<ny2;
+    }).map(w => w.dataset.well);
+  }
+
+  container.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    // Don't start drag on row/col labels
+    if (e.target.classList.contains('column-label') || e.target.classList.contains('row-label')) return;
+    dragStart = getPos(e); didDrag = false;
+    const tgt = e.target.closest('.well');
+    dragMode = (tgt && selectedWells.has(tgt.dataset.well)) ? 'deselect' : 'select';
+    rect.className = 'selection-rect' + (dragMode==='deselect' ? ' deselect-mode' : '');
+    rect.style.display = 'none';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragStart) return;
+    const pos = getPos(e);
+    const dx = pos.x-dragStart.x, dy = pos.y-dragStart.y;
+    if (!didDrag && (Math.abs(dx)>4 || Math.abs(dy)>4)) { didDrag=true; rect.style.display='block'; }
+    if (!didDrag) return;
+    rect.style.left   = Math.min(dragStart.x, pos.x) + 'px';
+    rect.style.top    = Math.min(dragStart.y, pos.y) + 'px';
+    rect.style.width  = Math.abs(dx) + 'px';
+    rect.style.height = Math.abs(dy) + 'px';
+    const inside = new Set(wellsInRect(dragStart.x, dragStart.y, pos.x, pos.y));
+    document.querySelectorAll('#plateGrid .well').forEach(w => {
+      w.classList.remove('in-selection-box','deselect-preview');
+      if (inside.has(w.dataset.well)) {
+        w.classList.add('in-selection-box');
+        if (dragMode==='deselect') w.classList.add('deselect-preview');
+      }
+    });
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (!dragStart) return;
+    const pos = getPos(e);
+    if (didDrag) {
+      wellsInRect(dragStart.x, dragStart.y, pos.x, pos.y).forEach(id => {
+        if (dragMode==='select')   selectedWells.add(id);
+        if (dragMode==='deselect') selectedWells.delete(id);
+      });
+    } else {
+      const tgt = e.target.closest && e.target.closest('#plateGrid .well');
+      if (tgt) {
+        const id = tgt.dataset.well;
+        selectedWells.has(id) ? selectedWells.delete(id) : selectedWells.add(id);
+      }
+    }
+    rect.style.display = 'none';
+    document.querySelectorAll('#plateGrid .well').forEach(w =>
+      w.classList.remove('in-selection-box','deselect-preview'));
+    dragStart = null; didDrag = false;
+    updateWellDisplay(); updateStats();
+  });
+}
+
+/* ═══ WELL DISPLAY ════════════════════════════════════════════════ */
+function updateWellDisplay() {
+  document.querySelectorAll('#plateGrid .well').forEach(well => {
+    const id = well.dataset.well;
+    well.classList.remove('selected','has-data');
+    const data = plateData[id];
+    if (!data) return;
+    if (Object.keys(data).some(k => !['well','row','column'].includes(k))) well.classList.add('has-data');
+    if (selectedWells.has(id)) well.classList.add('selected');
+  });
+}
+
+/* ═══ INPUT FIELD ═════════════════════════════════════════════════ */
+function updateInputField() {
+  const pt = document.getElementById('propertyType').value;
+  document.getElementById('customFieldGroup').style.display = pt==='custom' ? 'block' : 'none';
+  const needsUnit = ['enzyme_conc','substrate_conc'].includes(pt);
+  document.getElementById('unitInput').style.display = needsUnit ? '' : 'none';
+  document.getElementById('unitHint').style.display  = needsUnit ? '' : 'none';
+  if (needsUnit) document.getElementById('unitInput').value = propertyUnits[pt] || '';
+  const labels = {
+    sample:'Sample / Condition Name', enzyme_conc:'Enzyme Concentration',
+    substrate_type:'Substrate Type',  substrate_conc:'Substrate Concentration',
+    replicate:'Replicate Number'
+  };
+  document.getElementById('valueLabel').textContent = labels[pt] || 'Value';
+}
+
+/* ═══ APPLY / CLEAR / RESET ══════════════════════════════════════ */
+function applyPropertyToSelected() {
+  if (!selectedWells.size) { alert('Please select at least one well'); return; }
+  let pt = document.getElementById('propertyType').value;
+  const pv = document.getElementById('propertyValue').value.trim();
+  const uv = document.getElementById('unitInput').value.trim();
+  if (!pv) { alert('Please enter a value'); return; }
+  if (pt === 'custom') {
+    const cn = document.getElementById('customFieldName').value.trim();
+    if (!cn) { alert('Please enter a custom field name'); return; }
+    pt = cn; customFields.add(cn);
+  }
+  if (['enzyme_conc','substrate_conc'].includes(pt)) propertyUnits[pt] = uv;
+  snapshot();
+  selectedWells.forEach(id => { plateData[id][pt] = pv; });
+  selectedWells.clear();
+  document.getElementById('propertyValue').value = '';
+  updateWellDisplay(); updateStats(); updatePreview(); updateMapPropertyDropdown(); updatePlateMap();
+}
+
+function clearSelectedWells() {
+  if (!selectedWells.size) { alert('Please select wells to clear'); return; }
+  snapshot();
+  selectedWells.forEach(id => {
+    plateData[id] = { well:id, row:id.charAt(0), column:parseInt(id.substring(1)) };
+  });
+  selectedWells.clear();
+  updateWellDisplay(); updateStats(); updatePreview(); updateMapPropertyDropdown(); updatePlateMap();
+}
+
+function resetAll() {
+  if (!confirm('Reset all data? This cannot be undone.')) return;
+  snapshot();
+  Object.keys(plateData).forEach(id => {
+    plateData[id] = { well:id, row:id.charAt(0), column:parseInt(id.substring(1)) };
+  });
+  customFields.clear(); selectedWells.clear();
+  propertyUnits.enzyme_conc='µM'; propertyUnits.substrate_conc='mM';
+  document.getElementById('propertyValue').value = '';
+  undoStack.length = 0; redoStack.length = 0;
+  updateWellDisplay(); updateStats(); updatePreview();
+  updateMapPropertyDropdown(); updatePlateMap(); updateUndoButtons(); updateInputField();
+}
+
+function selectAll() {
+  getRows().forEach(r => { for (let c=1; c<=getCols(); c++) selectedWells.add(`${r}${c}`); });
+  updateWellDisplay(); updateStats();
+}
+function clearSelection() { selectedWells.clear(); updateWellDisplay(); updateStats(); }
+
+/* ═══ STATS ═══════════════════════════════════════════════════════ */
+function updateStats() {
+  document.getElementById('selectedCount').textContent = selectedWells.size;
+  const filled = Object.values(plateData).filter(d =>
+    Object.keys(d).some(k => !['well','row','column'].includes(k))).length;
+  document.getElementById('filledCount').textContent = filled;
+  document.getElementById('downloadBtn').disabled = filled === 0;
+}
+
+/* ═══ COLUMN HEADER ═══════════════════════════════════════════════ */
+function getColumnHeader(key) {
+  const umap = {
+    enzyme_conc:    `Enzyme Concentration (${propertyUnits.enzyme_conc||'µM'})`,
+    substrate_conc: `Substrate Concentration (${propertyUnits.substrate_conc||'mM'})`
+  };
+  if (umap[key]) return umap[key];
+  const nice = { sample:'Sample/Condition', substrate_type:'Substrate Type', replicate:'Replicate' };
+  return nice[key] || key.replace(/_/g,' ');
+}
+
+/* ═══ TABS ════════════════════════════════════════════════════════ */
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-'+tabId).classList.add('active');
+  btn.classList.add('active');
+  if (tabId === 'platemap') updatePlateMap();
+}
+
+/* ═══ PREVIEW ═════════════════════════════════════════════════════ */
+function updatePreview() {
+  const el = document.getElementById('previewTable');
+  const wells = Object.values(plateData).filter(d =>
+    Object.keys(d).some(k => !['well','row','column'].includes(k)));
+  if (!wells.length) {
+    el.innerHTML = '<p style="padding:20px;text-align:center;color:#999">No data yet. Select wells and apply properties.</p>';
+    return;
+  }
+  const allKeys = new Set(['well','row','column']);
+  wells.forEach(d => Object.keys(d).forEach(k => allKeys.add(k)));
+  const keys = Array.from(allKeys);
+  const sorted = [...wells].sort((a,b) => a.row!==b.row ? a.row.localeCompare(b.row) : a.column-b.column);
+  let html = '<table><thead><tr>';
+  keys.forEach(k => { html += `<th>${getColumnHeader(k)}</th>`; });
+  html += '</tr></thead><tbody>';
+  sorted.forEach(d => {
+    html += '<tr>';
+    keys.forEach(k => { html += `<td>${d[k]!==undefined?d[k]:''}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+/* ═══ PLATE MAP ═══════════════════════════════════════════════════ */
+const CAT_COLORS = [
+  '#4C6EF5','#F76707','#2F9E44','#E03131','#7048E8',
+  '#0C8599','#D6336C','#74B816','#E67700','#1864AB',
+  '#862E9C','#2B8A3E'
+];
+
+function getMetaKeys() {
+  const keys = new Set();
+  Object.values(plateData).forEach(d =>
+    Object.keys(d).forEach(k => { if (!['well','row','column'].includes(k)) keys.add(k); }));
+  return Array.from(keys);
+}
+
+function isNumeric(vals) {
+  return vals.length > 0 && vals.every(v => v!==undefined && v!=='' && !isNaN(Number(v)));
+}
+
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+function rgbToHex([r,g,b]) {
+  return '#' + [r,g,b].map(x => Math.round(Math.max(0,Math.min(255,x))).toString(16).padStart(2,'0')).join('');
+}
+function lerpColor(t, c1, c2) {
+  const a=hexToRgb(c1), b=hexToRgb(c2);
+  return rgbToHex(a.map((v,i) => v + (b[i]-v)*t));
+}
+function luminance(hex) {
+  const [r,g,b] = hexToRgb(hex);
+  return (0.299*r + 0.587*g + 0.114*b) / 255;
+}
+
+function updateMapPropertyDropdown() {
+  const sel = document.getElementById('mapProperty');
+  const cur = sel.value;
+  const keys = getMetaKeys();
+  sel.innerHTML = '<option value="">— select a property —</option>';
+  keys.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = getColumnHeader(k);
+    if (k === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function updatePlateMap() {
+  const prop    = document.getElementById('mapProperty').value;
+  const content = document.getElementById('plateMapContent');
+
+  if (!prop) {
+    const keys = getMetaKeys();
+    content.innerHTML = keys.length
+      ? '<div class="map-empty-msg">Choose a property from the dropdown above to colour the plate.</div>'
+      : '<div class="map-empty-msg">Apply metadata to wells, then choose a property above to visualise the plate.</div>';
+    return;
+  }
+
+  const rows = getRows(), cols = getCols();
+
+  // Collect all non-empty values for this property
+  const allVals = [];
+  rows.forEach(r => {
+    for (let c=1; c<=cols; c++) {
+      const v = plateData[`${r}${c}`]?.[prop];
+      if (v !== undefined && v !== '') allVals.push(v);
+    }
+  });
+  const uniqueVals = [...new Set(allVals)];
+  const numeric    = isNumeric(uniqueVals);
+
+  // Build colour function
+  let colorOf, legendHtml;
+  if (numeric) {
+    const nums = uniqueVals.map(Number);
+    const mn = Math.min(...nums), mx = Math.max(...nums);
+    colorOf = v => {
+      if (v===undefined || v==='') return null;
+      const t = mx===mn ? 0.5 : (Number(v)-mn)/(mx-mn);
+      return lerpColor(t, '#dbeafe', '#1e40af');
+    };
+    legendHtml = `
+      <h4>Legend — ${getColumnHeader(prop)}</h4>
+      <div class="gradient-bar" style="background:linear-gradient(to right,#dbeafe,#1e40af)"></div>
+      <div class="gradient-ends"><span>${mn}</span><span>${mx}</span></div>`;
+  } else {
+    const cmap = {};
+    uniqueVals.forEach((v,i) => { cmap[v] = CAT_COLORS[i % CAT_COLORS.length]; });
+    colorOf = v => (v!==undefined && v!=='') ? cmap[v] : null;
+    legendHtml = `<h4>Legend — ${getColumnHeader(prop)}</h4>` +
+      uniqueVals.map(v =>
+        `<div class="legend-row"><div class="legend-swatch" style="background:${cmap[v]}"></div><span>${v}</span></div>`
+      ).join('');
+  }
+
+  // Build map grid
+  let gridHtml = `<div class="map-plate-container"><div class="map-grid fmt-${plateFormat}">`;
+  gridHtml += '<div></div>';
+  for (let c=1; c<=cols; c++) gridHtml += `<div class="map-col-label">${c}</div>`;
+
+  rows.forEach(row => {
+    gridHtml += `<div class="map-row-label">${row}</div>`;
+    for (let c=1; c<=cols; c++) {
+      const id  = `${row}${c}`;
+      const d   = plateData[id];
+      const val = d?.[prop];
+      const bg  = colorOf(val);
+
+      if (!bg) {
+        // Build tooltip with whatever data exists
+        const tipLines = d ? Object.entries(d)
+          .filter(([k]) => !['well','row','column'].includes(k))
+          .map(([k,v]) => `${getColumnHeader(k)}: ${v}`).join('<br>') : '';
+        const tipContent = tipLines ? `${id}<br>${tipLines}` : `${id}: (no data)`;
+        gridHtml += `<div class="map-well empty-well"><span class="map-tooltip">${tipContent}</span></div>`;
+      } else {
+        const fg = luminance(bg) > 0.55 ? '#1a1a2e' : '#ffffff';
+        // Short label for 96-well
+        const disp = plateFormat===96
+          ? (String(val).length > 5 ? String(val).substring(0,4)+'…' : String(val))
+          : '';
+        const tipLines = d ? Object.entries(d)
+          .filter(([k]) => !['well','row','column'].includes(k))
+          .map(([k,v]) => `${getColumnHeader(k)}: ${v}`).join('<br>') : '';
+        gridHtml += `<div class="map-well" style="background:${bg};color:${fg}">${disp}<span class="map-tooltip">${id}<br>${tipLines}</span></div>`;
+      }
+    }
+  });
+  gridHtml += '</div></div>';
+
+  content.innerHTML = `
+    <div class="map-wrapper">
+      ${gridHtml}
+      <div class="map-legend">${legendHtml}</div>
+    </div>`;
+}
+
+/* ═══ DOWNLOAD ════════════════════════════════════════════════════ */
+function downloadTSV() {
+  const wells = Object.values(plateData).filter(d =>
+    Object.keys(d).some(k => !['well','row','column'].includes(k)));
+  if (!wells.length) { alert('No data to download.'); return; }
+  const allKeys = new Set(['well','row','column']);
+  wells.forEach(d => Object.keys(d).forEach(k => allKeys.add(k)));
+  const keys = Array.from(allKeys);
+  const sorted = [...wells].sort((a,b) => a.row!==b.row ? a.row.localeCompare(b.row) : a.column-b.column);
+  let tsv = keys.map(getColumnHeader).join('\t') + '\n';
+  sorted.forEach(d => { tsv += keys.map(k => d[k]!==undefined?d[k]:'').join('\t') + '\n'; });
+  const blob = new Blob([tsv], { type:'text/tab-separated-values' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `plate_metadata_${plateFormat}well.tsv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+/* ═══ BOOT ════════════════════════════════════════════════════════ */
+initPlate();
+updateStats();
+updatePreview();
+updateInputField();
+</script>
+</body>
+</html>
